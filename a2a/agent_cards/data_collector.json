@@ -1,0 +1,6 @@
+{
+  "name": "DataCollectorAgent",
+  "description": "拉取行情与估值数据（M1 mock）",
+  "version": "0.1.0",
+  "skills": [{"id": "fetch-market-data", "name": "市场数据采集"}]
+}

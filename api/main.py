@@ -43,7 +43,14 @@ add_langgraph_fastapi_endpoint(app, langgraph_agent, path="/agent")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "agent": AGENT_NAME, "milestone": "M0"}
+    from agents.shared.llm import llm_configured, llm_provider_label
+
+    return {
+        "status": "ok",
+        "agent": AGENT_NAME,
+        "milestone": "M1",
+        "llm": llm_provider_label() if llm_configured() else "未配置",
+    }
 
 
 if __name__ == "__main__":
