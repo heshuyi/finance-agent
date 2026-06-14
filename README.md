@@ -27,7 +27,7 @@ source .venv/bin/activate
 pip install -e . -i https://pypi.org/simple
 
 cp .env.example .env
-# 编辑 .env 填入 OPENAI_API_KEY
+# 编辑 .env 填入 GEMINI_API_KEY（Google AI Studio）
 
 export PYTHONPATH="$(pwd)"
 ./scripts/dev-api.sh

@@ -8,12 +8,12 @@ import os
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 
 from a2a.client import send_task_async
 from a2a.types import TaskStatus
 from agents.shared.artifact import DISCLAIMER
 from agents.shared.intent import parse_user_text
+from agents.shared.llm import get_chat_model, llm_configured
 from agents.shared.state import MainAgentState, empty_sub_agent_status, new_task_id
 
 PIPELINE_INTENTS = {"buy_analysis", "sell_analysis", "verify_only", "data_query"}
@@ -220,13 +220,8 @@ def synthesize_judgment(state: MainAgentState) -> dict:
     text = _last_human_text(state)
     symbol_label = state.get("symbol_name") or state.get("symbol") or "标的"
 
-    if os.getenv("OPENAI_API_KEY"):
-        model = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            temperature=0.3,
-        )
+    if llm_configured():
+        model = get_chat_model()
         response = model.invoke([
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(
@@ -272,20 +267,15 @@ def chat_response(state: MainAgentState) -> dict:
     text = _last_human_text(state)
     context = f"意图: {state.get('intent')}\n标的: {state.get('symbol_name') or state.get('symbol') or '未识别'}"
 
-    if os.getenv("OPENAI_API_KEY"):
-        model = ChatOpenAI(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            api_key=os.getenv("OPENAI_API_KEY"),
-            base_url=os.getenv("OPENAI_BASE_URL"),
-            temperature=0.3,
-        )
+    if llm_configured():
+        model = get_chat_model()
         response = model.invoke([
             SystemMessage(content="你是 FinTeam 主 Agent，简洁专业回答投研问题。不构成投资建议。"),
             HumanMessage(content=f"{text}\n\n{context}"),
         ])
         content = str(response.content)
     else:
-        content = f"已收到：{text}\n\n（未配置 OPENAI_API_KEY，请配置后获得完整回复）\n\n{DISCLAIMER}"
+        content = f"已收到：{text}\n\n（未配置 GEMINI_API_KEY，请配置后获得完整回复）\n\n{DISCLAIMER}"
 
     return {
         "messages": [AIMessage(content=content)],
