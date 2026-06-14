@@ -7,7 +7,7 @@
 | [PR-001](PR-001-产品文档.md) | `docs/prd` | 产品文档 | 待合并 |
 | [PR-002](PR-002-M0-后端.md) | `feat/m0-backend` | M0 后端 | 待合并 |
 | [PR-003](PR-003-M0-前端.md) | `feat/m0-frontend` | M0 前端 | 待合并 |
-| [PR-004](PR-004-M1-A2A子Agent.md) | `feat/m1-a2a` | M1 A2A | 开发中 |
+| [PR-004](PR-004-M1-A2A子Agent.md) | `feat/m1-a2a` | M1 A2A | 待合并 |
 | [PR-005](PR-005-M2-验真与卖出辩论.md) | `feat/m2-auth-sell` | M2 | 计划中 |
 | [PR-006](PR-006-M3-持久化与回放.md) | `feat/m3-persist` | M3 | 计划中 |
 

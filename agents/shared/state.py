@@ -31,6 +31,7 @@ class MainAgentState(TypedDict):
     progress: int
     planned_agents: list[str]
     sub_agent_status: list[SubAgentStatus]
+    artifacts: dict
     artifacts_preview: dict
     human_decision: Optional[str]
     final_report: Optional[dict]
