@@ -131,14 +131,15 @@ def build_peers_context(data: dict[str, Any]) -> str:
         return f"【同业对比】行业: {industry}（暂无同业样本）"
     lines = [
         f"【同业对比】{data.get('symbol_name')} 所属行业: {industry}",
-        "代码 | 名称 | PE(动) | PB",
+        "代码 | 名称 | PE(动)/EPS | PB",
     ]
     for p in peers:
         pe = p.get("pe_ttm")
         pb = p.get("pb")
+        pe_label = p.get("metric_note", "PE(动)")
         pe_s = round(float(pe), 2) if pe is not None else "-"
         pb_s = round(float(pb), 2) if pb is not None else "-"
-        lines.append(f"{p.get('symbol')} | {p.get('symbol_name')} | {pe_s} | {pb_s}")
+        lines.append(f"{p.get('symbol')} | {p.get('symbol_name')} | {pe_s} ({pe_label}) | {pb_s}")
     return "\n".join(lines)
 
 

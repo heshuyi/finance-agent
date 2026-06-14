@@ -27,6 +27,8 @@ def run_verification(payload: dict) -> dict:
             "source": fin_bundle.get("source", "AKShare"),
         },
         valuation=valuation,
+        symbol=meta.get("symbol") or market_bundle.get("symbol") or "",
+        region=market_bundle.get("region") or fin_bundle.get("region") or "",
     )
 
     verified = []

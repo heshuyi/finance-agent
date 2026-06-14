@@ -7,14 +7,15 @@ from contextlib import asynccontextmanager
 
 from ag_ui_langgraph import LangGraphAgent, add_langgraph_fastapi_endpoint
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from agents.main.graph import build_main_graph
+from agents.shared.cancel import mark_cancelled
+from api.tools_routes import router as tools_router
 from storage.checkpoint import close_checkpointer, init_checkpointer
 from storage.db import get_db_path, init_db
 from storage.tasks import get_task, list_tasks
-from api.tools_routes import router as tools_router
 
 load_dotenv()
 
@@ -51,8 +52,12 @@ app.include_router(tools_router)
 
 
 @app.post("/agent/cancel")
-async def agent_cancel(thread_id: str = Query(..., description="CopilotKit thread_id")):
-    """标记当前线程分析为用户取消（下次节点检查生效）。"""
+async def agent_cancel(
+    thread_id: str = Query(..., description="CopilotKit thread_id"),
+    task_id: str = Query("", description="可选 task_id"),
+):
+    """标记当前线程分析为用户取消（流水线下一检查点生效）。"""
+    mark_cancelled(thread_id=thread_id, task_id=task_id or "")
     graph = app.state.main_graph
     config = {"configurable": {"thread_id": thread_id}}
     try:
@@ -64,8 +69,8 @@ async def agent_cancel(thread_id: str = Query(..., description="CopilotKit threa
                 "progress": 100,
             },
         )
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail=f"无法更新线程状态: {exc}") from exc
+    except Exception:
+        pass
     return {"ok": True, "thread_id": thread_id, "phase": "cancelled"}
 
 

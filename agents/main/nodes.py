@@ -7,11 +7,13 @@ import concurrent.futures
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import interrupt
 
 from a2a.client import send_task_async
 from a2a.types import TaskStatus
 from agents.shared.artifact import DISCLAIMER
+from agents.shared.cancel import clear_cancelled, is_cancelled as registry_cancelled
 from agents.shared.intent import parse_user_text
 from agents.shared.llm import get_chat_model, llm_configured
 from agents.shared.state import MainAgentState, empty_sub_agent_status, new_task_id
@@ -171,14 +173,27 @@ def should_after_await_human(state: MainAgentState) -> str:
     return _next_debate_or_synth(state)
 
 
-def _cancelled(state: MainAgentState) -> bool:
-    return bool(state.get("user_cancelled"))
+def _thread_id_from_config(config: RunnableConfig | None) -> str:
+    if not config:
+        return ""
+    return str(config.get("configurable", {}).get("thread_id") or "")
 
 
-def prepare_task(state: MainAgentState) -> dict:
+def _cancelled(state: MainAgentState, config: RunnableConfig | None = None) -> bool:
+    if state.get("user_cancelled"):
+        return True
+    thread_id = _thread_id_from_config(config)
+    task_id = state.get("task_id") or ""
+    return registry_cancelled(thread_id=thread_id, task_id=task_id)
+
+
+def prepare_task(state: MainAgentState, config: RunnableConfig) -> dict:
     text = _last_human_text(state)
     parsed = parse_user_text(text)
     now = _now_iso()
+    thread_id = _thread_id_from_config(config)
+    if thread_id:
+        clear_cancelled(thread_id=thread_id)
     sub_status = empty_sub_agent_status(now)
     for row in sub_status:
         if row["agent_id"] in parsed.planned_agents:
@@ -228,12 +243,12 @@ async def _run_agent(
     return artifacts, sub_status, errors
 
 
-def dispatch_pipeline(state: MainAgentState) -> dict:
-    return _run_async(_dispatch_pipeline_async(state))
+def dispatch_pipeline(state: MainAgentState, config: RunnableConfig) -> dict:
+    return _run_async(_dispatch_pipeline_async(state, config))
 
 
-async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
-    if _cancelled(state):
+async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig | None = None) -> dict:
+    if _cancelled(state, config):
         return _cancelled_result(state, "用户已取消分析")
 
     artifacts = dict(state.get("artifacts") or {})
@@ -255,7 +270,7 @@ async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
         )
         work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
 
-    if _cancelled(state):
+    if _cancelled(state, config):
         return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
 
     if "verification" in state.get("planned_agents", []) and artifacts.get("data_collector"):
@@ -267,12 +282,20 @@ async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
         )
         work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
 
+    if _cancelled(state, config):
+        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+
     if "authenticity" in state.get("planned_agents", []) and artifacts.get("verification"):
         artifacts, sub_status, errors = await _run_agent(
             {**work_state, "sub_agent_status": sub_status, "artifacts": artifacts, "errors": errors},
             "authenticity",
             "verify-authenticity",
-            {"task_id": state["task_id"], "verified_data": artifacts["verification"]},
+            {
+                "task_id": state["task_id"],
+                "verified_data": artifacts["verification"],
+                "symbol": state.get("symbol"),
+                "symbol_name": state.get("symbol_name"),
+            },
         )
 
     if artifacts.get("authenticity"):
@@ -354,12 +377,12 @@ def _cancelled_result(state: MainAgentState, message: str = "用户已取消分�
     }
 
 
-def dispatch_debate(state: MainAgentState) -> dict:
-    return _run_async(_dispatch_debate_async(state))
+def dispatch_debate(state: MainAgentState, config: RunnableConfig) -> dict:
+    return _run_async(_dispatch_debate_async(state, config))
 
 
-async def _dispatch_debate_async(state: MainAgentState) -> dict:
-    if _cancelled(state):
+async def _dispatch_debate_async(state: MainAgentState, config: RunnableConfig | None = None) -> dict:
+    if _cancelled(state, config):
         return _cancelled_result(state)
 
     artifacts = dict(state.get("artifacts") or {})
