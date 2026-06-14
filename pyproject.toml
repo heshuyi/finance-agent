@@ -1,0 +1,30 @@
+[project]
+name = "finteam-agent"
+version = "0.1.0"
+description = "FinTeam Agent — 金融投研多 Agent 系统（LangGraph + A2A + AG-UI）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ag-ui-langgraph>=0.0.41",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "langgraph>=1.2.0",
+    "langchain-core>=1.4.0",
+    "langchain-openai>=0.3.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agents*", "api*", "tools*", "a2a*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
