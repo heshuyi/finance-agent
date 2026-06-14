@@ -9,7 +9,7 @@ echo "==> 检查 gh 登录状态..."
 gh auth status
 
 GITHUB_USER="$(gh api user -q .login)"
-REPO_NAME="${1:-fundAgents}"
+REPO_NAME="${1:-finance-agent}"
 REMOTE="origin"
 
 echo "==> GitHub 用户: $GITHUB_USER"
