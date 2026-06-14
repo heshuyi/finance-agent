@@ -5,8 +5,11 @@ import {
   fetchAnalysisContextTool,
   fetchFilingsTool,
   fetchFinancialsTool,
+  fetchIndicatorsTool,
   fetchMarketTool,
   fetchNewsTool,
+  fetchPeersTool,
+  fetchValuationTool,
   formatToolResult,
   type ToolApiResponse,
 } from "@/lib/tools-api";
@@ -15,6 +18,7 @@ type ToolArgs = {
   symbol: string;
   symbol_name?: string;
   limit?: number;
+  days?: number;
 };
 
 export function FinTeamFrontendTools() {
@@ -68,6 +72,20 @@ export function FinTeamFrontendTools() {
     ],
     handler: async ({ symbol, symbol_name, limit }: ToolArgs) => {
       const res = await fetchFilingsTool(symbol, symbol_name ?? "", limit ?? 5);
+      return formatToolResult(res);
+    },
+  });
+
+  useFrontendTool({
+    name: "get_valuation_history",
+    description: "获取 A 股估值历史序列与 PE/PB 近一年分位（AKShare 免费数据）",
+    parameters: [
+      { name: "symbol", type: "string", description: "A 股 6 位代码", required: true },
+      { name: "symbol_name", type: "string", description: "标的名称", required: false },
+      { name: "days", type: "number", description: "历史天数，默认 365", required: false },
+    ],
+    handler: async ({ symbol, symbol_name, days }: ToolArgs) => {
+      const res = await fetchValuationTool(symbol, symbol_name ?? "", days ?? 365);
       return formatToolResult(res);
     },
   });

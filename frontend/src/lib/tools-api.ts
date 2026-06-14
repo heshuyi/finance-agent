@@ -44,6 +44,22 @@ export function fetchAnalysisContextTool(symbol: string, symbolName = "", limit 
   return callTool<{ ai_context?: string }>("context", { symbol, symbol_name: symbolName, limit });
 }
 
+export function fetchValuationTool(symbol: string, symbolName = "", days = 365) {
+  return callTool<Record<string, unknown>>("valuation", {
+    symbol,
+    symbol_name: symbolName,
+    days,
+  });
+}
+
+export function fetchIndicatorsTool(symbol: string, symbolName = "") {
+  return callTool<Record<string, unknown>>("indicators", { symbol, symbol_name: symbolName });
+}
+
+export function fetchPeersTool(symbol: string, symbolName = "", limit = 3) {
+  return callTool<Record<string, unknown>>("peers", { symbol, symbol_name: symbolName, limit });
+}
+
 /** 返回给 CopilotKit Agent 的分析上下文，不是给用户看的原始 JSON */
 export function formatToolResult(res: ToolApiResponse<Record<string, unknown>>): string {
   if (res.ai_context) {

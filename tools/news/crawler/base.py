@@ -19,10 +19,14 @@ DEFAULT_HEADERS = {
 HTTP_TIMEOUT = float(os.getenv("DATA_HTTP_TIMEOUT", "15"))
 REQUEST_INTERVAL_SEC = float(os.getenv("DATA_REQUEST_INTERVAL_SEC", "0.5"))
 
-# 第三方资讯列表接口 — 默认关闭，需用户显式开启（个人投研自用）
-NEWS_FETCH_ENABLED = os.getenv("NEWS_FETCH_ENABLED", os.getenv("NEWS_CRAWLER_ENABLED", "false")).lower() in {
-    "1", "true", "yes",
-}
+# 第三方资讯列表接口 — 默认开启（东财公开列表）；设为 false 可关闭
+def _news_fetch_enabled() -> bool:
+    return os.getenv("NEWS_FETCH_ENABLED", os.getenv("NEWS_CRAWLER_ENABLED", "true")).lower() in {
+        "1", "true", "yes",
+    }
+
+
+NEWS_FETCH_ENABLED = _news_fetch_enabled()
 
 # 是否抓取资讯正文页摘要 — 默认关闭，仅使用列表接口返回的标题/链接
 FETCH_DIGEST = os.getenv("NEWS_FETCH_DIGEST", "false").lower() in {"1", "true", "yes"}

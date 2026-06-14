@@ -12,7 +12,7 @@ from tools.compliance import is_allowed_news_article_url
 from tools.news.crawler.base import (
     DIGEST_LIMIT,
     FETCH_DIGEST,
-    NEWS_FETCH_ENABLED,
+    _news_fetch_enabled,
     data_client,
     throttle_request,
 )
@@ -56,7 +56,7 @@ def fetch_eastmoney_stock_news(
 
     仅获取标题、媒体、发布时间、原文链接；正文摘要需显式开启且限于白名单域名。
     """
-    if not NEWS_FETCH_ENABLED:
+    if not _news_fetch_enabled():
         return ToolResult.success(
             {"items": [], "mode": "disabled", "hint": "NEWS_FETCH_ENABLED 未开启"},
             source="EastMoney",

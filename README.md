@@ -48,7 +48,7 @@ npm run dev
 
 ## 分支与 PR
 
-详见 [docs/pr/README.md](docs/pr/README.md)。PR-001～PR-007 已全部合并至 `main`。
+详见 [docs/pr/README.md](docs/pr/README.md)。PR-001～PR-010（M4 免费数据深化）开发中。
 
 ## 文档
 
@@ -78,3 +78,4 @@ Agent 协作说明见根目录 `AGENTS.md`；Cursor 规则见 `.cursor/rules/git
 - **M2**：验真 + HITL + 卖出辩论 + 终裁报告
 - **M3**：SQLite 持久化 + 历史研判回放
 - **M3+**：CopilotKit Threads + 投研 Tools + 快问快答 `ai_context`
+- **M4**：AKShare 估值分位 + 财报指标 + 同业对比 + 子 Agent LLM 化 + 持仓情境

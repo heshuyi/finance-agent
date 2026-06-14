@@ -37,6 +37,8 @@ class MainAgentState(TypedDict):
     human_decision: Optional[str]
     final_report: Optional[dict]
     errors: list[dict]
+    position: Optional[dict]
+    user_cancelled: Optional[bool]
 
 
 SUB_AGENT_IDS = [
