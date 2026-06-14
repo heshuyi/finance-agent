@@ -1,6 +1,8 @@
 # FinTeam Agent
 
-金融投研多 Agent 系统 — LangGraph + A2A + AG-UI，全栈自研。
+金融投研多 Agent 系统 — LangGraph + A2A + AG-UI，**个人本地自用**。
+
+> **部署范围**：仅在本机运行（`127.0.0.1`），无线上 / 公网部署需求。数据与 API Key 留在本地；**历史研判**与**历史对话**均存入本地 SQLite（`data/finteam.db`）。
 
 ## 架构
 
@@ -44,15 +46,9 @@ npm run dev
 # 打开 http://localhost:3000
 ```
 
-## 分支与 PR 规范
+## 分支与 PR
 
-| 分支 | 内容 |
-|------|------|
-| `main` | 稳定基线 |
-| `docs/prd` | PRD 与产品文档 |
-| `feat/m0-backend` | M0 后端（MainAgent + AG-UI API） |
-| `feat/m0-frontend` | M0 前端（对话页 + 状态面板） |
-| `feat/m1-a2a` | M1 子 Agent A2A 闭环（计划中） |
+详见 [docs/pr/README.md](docs/pr/README.md)。PR-001～PR-007 已全部合并至 `main`。
 
 ## 文档
 
@@ -62,7 +58,8 @@ npm run dev
 
 ## 里程碑
 
-- **M0**（当前）：MainAgent 对话 + AG-UI 流式 + 任务状态同步
-- **M1**：A2A 子 Agent 流水线 + 辩论区
-- **M2**：验真 + HITL + 终裁报告页
-- **M3**：历史回放 + Checkpoint
+- **M0**：MainAgent 对话 + AG-UI 流式 + 任务状态同步
+- **M1**：A2A 子 Agent 流水线 + 买入辩论
+- **M2**：验真 + HITL + 卖出辩论 + 终裁报告
+- **M3**：SQLite 持久化 + 历史研判回放
+- **M3+**：CopilotKit Threads + 投研 Tools + 快问快答 `ai_context`

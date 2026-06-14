@@ -11,11 +11,12 @@
 | [PR-005](PR-005-M2-验真与卖出辩论.md) | `feat/m2-auth-sell` | [#5](https://github.com/heshuyi/finance-agent/pull/5) | M2 | 已合并 |
 | [PR-006](PR-006-M3-持久化与回放.md) | `feat/m3-persist` | [#6](https://github.com/heshuyi/finance-agent/pull/6) | M3 | 已合并 |
 | [PR-007](PR-007-历史对话与联调修复.md) | `feat/pr007-history-chat` | [#7](https://github.com/heshuyi/finance-agent/pull/7) | M3+ | 已合并 |
+| [PR-008](PR-008-历史对话SQLite持久化.md) | `feat/pr008-chat-sqlite` | — | M3+ | 待合并 |
 
 ## 合并顺序
 
 ```
-PR-001 → PR-002 → PR-003 → PR-004 → PR-005 → PR-006 → PR-007  ✓ 全部完成
+PR-001 → … → PR-007 → PR-008
 ```
 
 ## 规范

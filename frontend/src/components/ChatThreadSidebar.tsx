@@ -65,7 +65,7 @@ export function ChatThreadSidebar() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-500">CopilotKit 会话线程（本地内存）</p>
+        <p className="text-xs text-zinc-500">CopilotKit 会话线程（SQLite 本地库）</p>
         <button
           type="button"
           onClick={() => {
