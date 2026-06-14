@@ -48,6 +48,28 @@ CREATE TABLE IF NOT EXISTS content_cache (
 
 CREATE INDEX IF NOT EXISTS idx_content_cache_symbol ON content_cache(symbol, cache_type);
 CREATE INDEX IF NOT EXISTS idx_content_cache_fetched_at ON content_cache(fetched_at DESC);
+
+CREATE TABLE IF NOT EXISTS chat_threads (
+    thread_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    name TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_runs (
+    run_id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    parent_run_id TEXT,
+    events_json TEXT NOT NULL,
+    messages_json TEXT NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    FOREIGN KEY (thread_id) REFERENCES chat_threads(thread_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_runs_thread ON chat_runs(thread_id, created_at_ms);
+CREATE INDEX IF NOT EXISTS idx_chat_threads_updated ON chat_threads(updated_at DESC);
 """
 
 
