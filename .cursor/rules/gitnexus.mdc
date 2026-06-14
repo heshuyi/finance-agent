@@ -1,0 +1,32 @@
+---
+description: GitNexus 代码图谱 — 理解架构、影响分析、调试与重构前必读
+alwaysApply: true
+---
+
+# GitNexus（finance-agent）
+
+本仓库已索引 GitNexus（`finance-agent`）。优先使用 **user-gitnexus** MCP 工具，而非盲目 grep。
+
+## 开始任务前
+
+1. 读取 `gitnexus://repo/finance-agent/context` 确认索引新鲜
+2. 若 stale → 在项目根目录运行 `npx gitnexus analyze`
+
+## 必做
+
+- 修改函数/类/方法前：`impact({target, direction: "upstream"})` 评估影响范围
+- 探索陌生代码：`query({query: "概念"})` 查执行流
+- 提交前：`detect_changes()` 核对变更影响面
+- 重命名：用 `rename` 工具，禁止全文 find-replace
+
+## Skills
+
+| 场景 | 文件 |
+|------|------|
+| 架构探索 | `.cursor/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| 影响分析 | `.cursor/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| 调试 | `.cursor/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| 重构 | `.cursor/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| CLI | `.cursor/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+完整说明见根目录 `AGENTS.md`。
