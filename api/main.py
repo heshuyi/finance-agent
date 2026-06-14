@@ -50,6 +50,25 @@ app.add_middleware(
 app.include_router(tools_router)
 
 
+@app.post("/agent/cancel")
+async def agent_cancel(thread_id: str = Query(..., description="CopilotKit thread_id")):
+    """标记当前线程分析为用户取消（下次节点检查生效）。"""
+    graph = app.state.main_graph
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        graph.update_state(
+            config,
+            {
+                "user_cancelled": True,
+                "phase": "cancelled",
+                "progress": 100,
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=f"无法更新线程状态: {exc}") from exc
+    return {"ok": True, "thread_id": thread_id, "phase": "cancelled"}
+
+
 @app.get("/health")
 def health():
     from agents.shared.llm import llm_configured, llm_provider_label
@@ -57,7 +76,7 @@ def health():
     return {
         "status": "ok",
         "agent": AGENT_NAME,
-        "milestone": "M3",
+        "milestone": "M4",
         "db": str(get_db_path()),
         "llm": llm_provider_label() if llm_configured() else "未配置",
     }

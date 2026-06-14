@@ -8,15 +8,21 @@ from fastapi import APIRouter, HTTPException, Query
 
 from tools.context_loader import load_analysis_context
 from tools.filings.cninfo import fetch_filings
+from tools.financials.indicators import fetch_financial_indicators
 from tools.financials.info import fetch_financials
 from tools.market.bundle import fetch_market_bundle
 from tools.news.feed import fetch_news_feed
+from tools.peers.compare import fetch_peer_comparison
 from tools.symbols import resolve_a_share
+from tools.valuation.history import fetch_valuation_history
 from tools.ai_context import (
     build_filings_context,
     build_financials_context,
+    build_indicators_context,
     build_market_context,
     build_news_context,
+    build_peers_context,
+    build_valuation_context,
 )
 from tools.types import ToolResult
 
@@ -70,6 +76,41 @@ def tools_financials(
     return _serialize(result, ai_context=ctx)
 
 
+@router.get("/valuation")
+def tools_valuation(
+    symbol: str = Query(...),
+    symbol_name: str = Query(""),
+    days: int = Query(365, ge=30, le=730),
+):
+    sym = _require_symbol(symbol, symbol_name)
+    result = fetch_valuation_history(sym, symbol_name, days=days)
+    ctx = build_valuation_context(result.data) if result.ok else None
+    return _serialize(result, ai_context=ctx)
+
+
+@router.get("/indicators")
+def tools_indicators(
+    symbol: str = Query(...),
+    symbol_name: str = Query(""),
+):
+    sym = _require_symbol(symbol, symbol_name)
+    result = fetch_financial_indicators(sym, symbol_name)
+    ctx = build_indicators_context(result.data) if result.ok else None
+    return _serialize(result, ai_context=ctx)
+
+
+@router.get("/peers")
+def tools_peers(
+    symbol: str = Query(...),
+    symbol_name: str = Query(""),
+    limit: int = Query(3, ge=1, le=5),
+):
+    sym = _require_symbol(symbol, symbol_name)
+    result = fetch_peer_comparison(sym, symbol_name, limit=limit)
+    ctx = build_peers_context(result.data) if result.ok else None
+    return _serialize(result, ai_context=ctx)
+
+
 @router.get("/news")
 def tools_news(
     symbol: str = Query(...),
@@ -100,7 +141,7 @@ def tools_full_context(
     symbol_name: str = Query("", description="标的名称"),
     limit: int = Query(5, ge=1, le=15),
 ):
-    """合并行情/财报/资讯/公告，返回供 LLM 分析用的完整上下文。"""
+    """合并行情/财报/估值/同业/资讯/公告，返回供 LLM 分析用的完整上下文。"""
     sym = _require_symbol(symbol, symbol_name)
     ai_context = load_analysis_context(sym, symbol_name, limit=limit)
     market = fetch_market_bundle(sym, symbol_name)

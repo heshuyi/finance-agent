@@ -107,7 +107,12 @@ def _load_chat_ai_context(state: MainAgentState) -> str | None:
     from tools.context_loader import load_analysis_context
 
     try:
-        return load_analysis_context(symbol, name, limit=5)
+        return load_analysis_context(
+            symbol,
+            name,
+            limit=5,
+            position=state.get("position"),
+        )
     except Exception as exc:
         return f"（投研数据拉取失败: {exc}，请基于已有信息回答）"
 
@@ -153,6 +158,8 @@ def should_run_pipeline(state: MainAgentState) -> str:
 
 
 def should_after_pipeline(state: MainAgentState) -> str:
+    if state.get("phase") == "cancelled" or state.get("user_cancelled"):
+        return "persist_task"
     if _auth_needs_human(state):
         return "await_human"
     return _next_debate_or_synth(state)
@@ -162,6 +169,10 @@ def should_after_await_human(state: MainAgentState) -> str:
     if state.get("human_decision") == "abort":
         return "cancel_task"
     return _next_debate_or_synth(state)
+
+
+def _cancelled(state: MainAgentState) -> bool:
+    return bool(state.get("user_cancelled"))
 
 
 def prepare_task(state: MainAgentState) -> dict:
@@ -188,6 +199,8 @@ def prepare_task(state: MainAgentState) -> dict:
         "human_decision": None,
         "final_report": None,
         "errors": [],
+        "position": parsed.position or None,
+        "user_cancelled": False,
     }
 
 
@@ -220,6 +233,9 @@ def dispatch_pipeline(state: MainAgentState) -> dict:
 
 
 async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
+    if _cancelled(state):
+        return _cancelled_result(state, "用户已取消分析")
+
     artifacts = dict(state.get("artifacts") or {})
     sub_status = list(state.get("sub_agent_status") or [])
     errors = list(state.get("errors") or [])
@@ -234,9 +250,13 @@ async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
                 "task_id": state["task_id"],
                 "symbol": state.get("symbol"),
                 "symbol_name": state.get("symbol_name"),
+                "position": state.get("position") or {},
             },
         )
         work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+
+    if _cancelled(state):
+        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
 
     if "verification" in state.get("planned_agents", []) and artifacts.get("data_collector"):
         artifacts, sub_status, errors = await _run_agent(
@@ -309,12 +329,28 @@ def await_human(state: MainAgentState) -> dict:
 
 
 def cancel_task(state: MainAgentState) -> dict:
+    reason = "验真存疑项未通过人工确认" if state.get("human_decision") == "abort" else "用户主动取消"
     return {
-        "messages": [AIMessage(content="已终止：验真存疑项未通过人工确认，本次分析已取消。")],
+        "messages": [AIMessage(content=f"已终止：{reason}，本次分析已取消。")],
         "phase": "cancelled",
         "progress": 100,
         "awaiting_human": None,
         "final_report": None,
+        "user_cancelled": True,
+    }
+
+
+def _cancelled_result(state: MainAgentState, message: str = "用户已取消分析") -> dict:
+    return {
+        "artifacts": state.get("artifacts") or {},
+        "sub_agent_status": state.get("sub_agent_status") or [],
+        "errors": state.get("errors") or [],
+        "messages": [AIMessage(content=f"已终止：{message}。")],
+        "phase": "cancelled",
+        "progress": 100,
+        "awaiting_human": None,
+        "final_report": None,
+        "user_cancelled": True,
     }
 
 
@@ -323,6 +359,9 @@ def dispatch_debate(state: MainAgentState) -> dict:
 
 
 async def _dispatch_debate_async(state: MainAgentState) -> dict:
+    if _cancelled(state):
+        return _cancelled_result(state)
+
     artifacts = dict(state.get("artifacts") or {})
     sub_status = list(state.get("sub_agent_status") or [])
     errors = list(state.get("errors") or [])
@@ -334,6 +373,7 @@ async def _dispatch_debate_async(state: MainAgentState) -> dict:
         "symbol": state.get("symbol"),
         "symbol_name": state.get("symbol_name"),
         "verified_data": artifacts.get("verification"),
+        "position": state.get("position") or {},
     }
 
     async def run_one(agent_id: str, skill: str) -> tuple[dict, list, list]:
@@ -382,6 +422,12 @@ def synthesize_judgment(state: MainAgentState) -> dict:
     text = _last_human_text(state)
     symbol_label = state.get("symbol_name") or state.get("symbol") or "标的"
     intent = state.get("intent", "general")
+    position = state.get("position") or {}
+    pos_line = ""
+    if position.get("cost_price") is not None:
+        pos_line = f"\n持仓：成本 {position['cost_price']}"
+        if position.get("profit_pct") is not None:
+            pos_line += f"，估算盈亏 {position['profit_pct']}%"
 
     if llm_configured():
         model = get_chat_model()
@@ -389,7 +435,7 @@ def synthesize_judgment(state: MainAgentState) -> dict:
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(
                 content=(
-                    f"用户问题：{text}\n标的：{symbol_label}\n意图：{intent}\n\n"
+                    f"用户问题：{text}\n标的：{symbol_label}\n意图：{intent}{pos_line}\n\n"
                     f"子 Agent Artifact 摘要：\n{artifact_text}\n\n"
                     "请输出：一句话结论、已验证事实、多方观点、核心分歧、未决问题、免责声明。"
                 )
@@ -422,6 +468,7 @@ def synthesize_judgment(state: MainAgentState) -> dict:
         "task_id": state["task_id"],
         "intent": intent,
         "content": content,
+        "position": position or None,
         "artifacts": {k: v.get("artifact_id") for k, v in artifacts.items()},
         "debate": {
             "pro_buy": artifacts.get("pro_buy"),

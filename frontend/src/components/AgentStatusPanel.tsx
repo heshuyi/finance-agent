@@ -1,5 +1,8 @@
 "use client";
 
+import { useCallback } from "react";
+import { useThread } from "@/context/thread-context";
+
 type SubAgentStatus = {
   agent_id: string;
   status: "pending" | "working" | "completed" | "failed" | "timeout" | string;
@@ -15,6 +18,11 @@ export type AgentState = {
   progress?: number;
   sub_agent_status?: SubAgentStatus[];
   planned_agents?: string[];
+  position?: {
+    cost_price?: number;
+    quantity?: number;
+    profit_pct?: number;
+  } | null;
   awaiting_human?: {
     reason?: string;
     options?: string[];
@@ -51,18 +59,52 @@ const STATUS_COLORS: Record<string, string> = {
   timeout: "bg-amber-100 text-amber-700",
 };
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+
+const ACTIVE_PHASES = new Set(["planning", "data", "verify", "auth", "debate", "judgment"]);
+
 export function AgentStatusPanel({ state }: { state: AgentState }) {
   const progress = state.progress ?? 0;
   const phase = state.phase ?? "planning";
+  const { threadId } = useThread();
+
+  const canCancel = ACTIVE_PHASES.has(phase);
+
+  const handleCancel = useCallback(async () => {
+    if (!threadId || threadId === "bootstrap") return;
+    try {
+      const qs = new URLSearchParams({ thread_id: threadId });
+      await fetch(`${API_BASE}/agent/cancel?${qs}`, { method: "POST" });
+    } catch {
+      // 取消为尽力而为；流水线下一检查点会停止
+    }
+  }, [threadId]);
 
   return (
     <aside className="flex w-full flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:w-80">
-      <div>
-        <h2 className="text-sm font-semibold text-zinc-900">任务状态</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          {state.symbol_name || state.symbol || "未识别标的"}
-          {state.intent ? ` · ${state.intent}` : ""}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-900">任务状态</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            {state.symbol_name || state.symbol || "未识别标的"}
+            {state.intent ? ` · ${state.intent}` : ""}
+          </p>
+          {state.position?.cost_price != null && (
+            <p className="mt-1 text-xs text-zinc-500">
+              持仓成本 {state.position.cost_price}
+              {state.position.profit_pct != null ? ` · 盈亏约 ${state.position.profit_pct}%` : ""}
+            </p>
+          )}
+        </div>
+        {canCancel && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="shrink-0 rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+          >
+            取消分析
+          </button>
+        )}
       </div>
 
       <div>
@@ -94,7 +136,7 @@ export function AgentStatusPanel({ state }: { state: AgentState }) {
                   {AGENT_LABELS[row.agent_id] ?? row.agent_id}
                 </span>
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[row.status]}`}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${STATUS_COLORS[row.status] ?? STATUS_COLORS.pending}`}
                 >
                   {row.status}
                 </span>

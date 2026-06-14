@@ -41,6 +41,7 @@ def build_main_graph(checkpointer: BaseCheckpointSaver):
         "await_human": "await_human",
         "dispatch_debate": "dispatch_debate",
         "synthesize_judgment": "synthesize_judgment",
+        "persist_task": "persist_task",
     })
     graph.add_conditional_edges("await_human", should_after_await_human, {
         "cancel_task": "cancel_task",
