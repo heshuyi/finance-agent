@@ -16,10 +16,27 @@ from agents.shared.intent import parse_user_text
 from agents.shared.llm import get_chat_model, llm_configured
 from agents.shared.state import MainAgentState, empty_sub_agent_status, new_task_id
 
-PIPELINE_INTENTS = {"buy_analysis", "sell_analysis", "verify_only", "data_query"}
+PIPELINE_INTENTS = {"buy_analysis", "sell_analysis", "verify_only"}
+
+CHAT_CONTEXT_KEYWORDS = (
+    "行情", "股价", "价格", "涨跌", "市值", "估值", "PE", "pe", "pb", "PB",
+    "新闻", "资讯", "公告", "财报", "营收", "净利", "走势", "怎么样", "如何",
+)
+
+CHAT_RESPONSE_SYSTEM = """你是 FinTeam 主 Agent，基于提供的「投研数据上下文」回答用户问题。
+这些数据来自公开渠道或用户配置的授权 API，仅供个人投研辅助参考。
+
+硬性规则：
+- 不构成投资建议，不得承诺收益、必涨、稳赚等表述
+- 明确标注数据来源（行情/资讯/法定公告）
+- 资讯与公告仅作事件参考，不代表官方背书
+- 数据不足或来源冲突时如实说明，不编造
+- 回答简洁专业，末尾附免责声明
+"""
 
 SYSTEM_PROMPT = """你是 FinTeam Agent 的主编排 Agent（投研团队负责人）。
-你已调度数据、核查、验真、辩论子 Agent 完成分析，请基于提供的 Artifact 摘要给出综合研判。
+子 Agent 已通过 Tool 拉取行情、资讯、公告等事实数据，并整理为「投研数据上下文」供你分析。
+你的任务是解读这些事实，而非复述原始数据。
 
 硬性规则：
 - 不构成投资建议，末尾附免责声明
@@ -64,6 +81,37 @@ def _last_human_text(state: MainAgentState) -> str:
     return ""
 
 
+def _should_load_chat_context(state: MainAgentState) -> bool:
+    symbol = state.get("symbol")
+    if symbol:
+        return True
+    text = _last_human_text(state)
+    return any(k in text for k in CHAT_CONTEXT_KEYWORDS)
+
+
+def _resolve_chat_symbol(state: MainAgentState) -> tuple[str, str]:
+    symbol = state.get("symbol") or ""
+    name = state.get("symbol_name") or ""
+    if symbol:
+        return symbol, name
+    parsed = parse_user_text(_last_human_text(state))
+    return parsed.symbol, parsed.symbol_name
+
+
+def _load_chat_ai_context(state: MainAgentState) -> str | None:
+    if not _should_load_chat_context(state):
+        return None
+    symbol, name = _resolve_chat_symbol(state)
+    if not symbol:
+        return None
+    from tools.context_loader import load_analysis_context
+
+    try:
+        return load_analysis_context(symbol, name, limit=5)
+    except Exception as exc:
+        return f"（投研数据拉取失败: {exc}，请基于已有信息回答）"
+
+
 def _set_agent_status(
     status_list: list[dict],
     agent_id: str,
@@ -96,6 +144,9 @@ def _next_debate_or_synth(state: MainAgentState) -> str:
 def should_run_pipeline(state: MainAgentState) -> str:
     intent = state.get("intent", "general")
     planned = state.get("planned_agents") or []
+    # 行情/新闻/公告类轻量查询：注入 ai_context 后直接快答，不走子 Agent 流水线
+    if intent == "data_query":
+        return "chat_response"
     if intent in PIPELINE_INTENTS and planned:
         return "dispatch_pipeline"
     return "chat_response"
@@ -315,7 +366,15 @@ async def _dispatch_debate_async(state: MainAgentState) -> dict:
 def synthesize_judgment(state: MainAgentState) -> dict:
     artifacts = state.get("artifacts") or {}
     summary_lines = []
+
+    data_bundle = artifacts.get("data_collector") or {}
+    ai_context = (data_bundle.get("metadata") or {}).get("ai_context")
+    if ai_context:
+        summary_lines.append(f"### 投研数据上下文（data_collector）\n{ai_context}")
+
     for aid, art in artifacts.items():
+        if aid == "data_collector" and ai_context:
+            continue
         claims = art.get("claims") or []
         summary_lines.append(f"### {aid}\n" + "\n".join(f"- {c.get('statement')}" for c in claims[:4]))
 
@@ -384,24 +443,46 @@ def synthesize_judgment(state: MainAgentState) -> dict:
 
 
 def chat_response(state: MainAgentState) -> dict:
-    """通用问答（无流水线）。"""
+    """通用问答（无流水线）— 有标的时自动注入投研数据上下文供 AI 分析。"""
     text = _last_human_text(state)
-    context = f"意图: {state.get('intent')}\n标的: {state.get('symbol_name') or state.get('symbol') or '未识别'}"
+    symbol = state.get("symbol_name") or state.get("symbol") or "未识别"
+    ai_context = _load_chat_ai_context(state)
+
+    user_parts = [f"用户问题：{text}", f"标的：{symbol}"]
+    if ai_context:
+        user_parts.append(f"\n投研数据上下文（供分析，勿原样复述）：\n{ai_context}")
+    else:
+        user_parts.append("\n（未识别标的或未触发数据拉取，请基于常识简要回答并提示用户提供股票代码）")
 
     if llm_configured():
         model = get_chat_model()
         response = model.invoke([
-            SystemMessage(content="你是 FinTeam 主 Agent，简洁专业回答投研问题。不构成投资建议。"),
-            HumanMessage(content=f"{text}\n\n{context}"),
+            SystemMessage(content=CHAT_RESPONSE_SYSTEM),
+            HumanMessage(content="\n".join(user_parts)),
         ])
         content = str(response.content)
+        if DISCLAIMER not in content:
+            content = f"{content}\n\n{DISCLAIMER}"
     else:
-        content = f"已收到：{text}\n\n（未配置 GEMINI_API_KEY，请配置后获得完整回复）\n\n{DISCLAIMER}"
+        if ai_context:
+            content = (
+                f"已收到：{text}\n\n"
+                f"（未配置 GEMINI_API_KEY，以下为拉取到的投研数据上下文，配置 LLM 后可获得分析解读）\n\n"
+                f"{ai_context}\n\n{DISCLAIMER}"
+            )
+        else:
+            content = f"已收到：{text}\n\n（未配置 GEMINI_API_KEY，请配置后获得完整回复）\n\n{DISCLAIMER}"
+
+    preview = dict(state.get("artifacts_preview") or {})
+    if ai_context:
+        preview["ai_context"] = ai_context[:2000]
 
     return {
         "messages": [AIMessage(content=content)],
         "phase": "done",
         "progress": 100,
+        "artifacts_preview": preview,
+        "final_report": {"type": "chat", "content": content},
     }
 
 

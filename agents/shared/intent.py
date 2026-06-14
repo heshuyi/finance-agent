@@ -45,9 +45,9 @@ def parse_user_text(text: str) -> ParsedIntent:
     elif any(k in text for k in ("核实", "验真", "真假", "是否真实")):
         intent = "verify_only"
         planned = ["data_collector", "verification", "authenticity"]
-    elif any(k in text for k in ("PE", "pe", "估值", "营收", "查", "走势", "净值")):
+    elif any(k in text for k in ("PE", "pe", "估值", "营收", "查", "走势", "净值", "新闻", "资讯", "公告", "行情", "股价")):
         intent = "data_query"
-        planned = ["data_collector", "verification"]
+        planned = []
     elif any(k in text for k in ("买入", "值得买", "能不能买", "分析")):
         intent = "buy_analysis"
         planned = ["data_collector", "verification", "authenticity", "pro_buy", "anti_buy"]
