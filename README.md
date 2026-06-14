@@ -48,7 +48,7 @@ npm run dev
 
 ## 分支与 PR
 
-详见 [docs/pr/README.md](docs/pr/README.md)。PR-001～PR-010（M4 免费数据深化）开发中。
+详见 [docs/pr/README.md](docs/pr/README.md)。PR-001～PR-010 已全部合并至 `main`。
 
 ## 文档
 
