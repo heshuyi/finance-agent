@@ -9,6 +9,8 @@ frontend/.git/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+data/
+*.db
 .cursor/*
 !.cursor/skills/
 !.cursor/skills/**

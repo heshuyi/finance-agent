@@ -403,3 +403,24 @@ def chat_response(state: MainAgentState) -> dict:
         "phase": "done",
         "progress": 100,
     }
+
+
+def persist_task(state: MainAgentState) -> dict:
+    """研判结束后写入 SQLite（Task + Artifact 链）。"""
+    from storage.tasks import save_task_record
+
+    preview = state.get("artifacts_preview") or {}
+    save_task_record(
+        task_id=state["task_id"],
+        symbol=state.get("symbol"),
+        symbol_name=state.get("symbol_name"),
+        intent=state.get("intent", "general"),
+        phase=state.get("phase", "done"),
+        user_query=preview.get("user_query"),
+        final_report=state.get("final_report"),
+        artifacts=state.get("artifacts") or {},
+        sub_agent_status=state.get("sub_agent_status"),
+        human_decision=state.get("human_decision"),
+        errors=state.get("errors"),
+    )
+    return {}

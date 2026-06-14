@@ -9,15 +9,10 @@ type Artifact = {
 type DebateState = {
   intent?: string;
   planned_agents?: string[];
-  artifacts?: Record<string, Artifact>;
+  artifacts?: Record<string, unknown>;
   final_report?: {
-    debate?: {
-      pro_buy?: Artifact;
-      anti_buy?: Artifact;
-      pro_sell?: Artifact;
-      anti_sell?: Artifact;
-    };
-  };
+    debate?: Record<string, unknown>;
+  } | null;
 };
 
 const DEBATE_SLOTS = [
@@ -28,10 +23,9 @@ const DEBATE_SLOTS = [
 ] as const;
 
 function pickArtifact(state: DebateState, key: string): Artifact | undefined {
-  return (
-    state.final_report?.debate?.[key as keyof NonNullable<DebateState["final_report"]>["debate"]] ??
-    state.artifacts?.[key]
-  );
+  const fromReport = state.final_report?.debate?.[key as keyof NonNullable<DebateState["final_report"]>["debate"]];
+  const fromArtifacts = state.artifacts?.[key];
+  return (fromReport ?? fromArtifacts) as Artifact | undefined;
 }
 
 export function DebatePanel({ state }: { state: DebateState }) {

@@ -2,11 +2,11 @@
 
 type SubAgentStatus = {
   agent_id: string;
-  status: "pending" | "working" | "completed" | "failed" | "timeout";
+  status: "pending" | "working" | "completed" | "failed" | "timeout" | string;
   message?: string | null;
 };
 
-type AgentState = {
+export type AgentState = {
   task_id?: string;
   symbol?: string;
   symbol_name?: string;
