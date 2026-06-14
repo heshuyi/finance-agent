@@ -15,6 +15,8 @@ from a2a.types import TaskStatus
 from agents.shared.artifact import DISCLAIMER
 from agents.shared.cancel import clear_cancelled, is_cancelled as registry_cancelled
 from agents.shared.intent import parse_user_text
+from agents.shared.intent_classifier import classify_intent
+from agents.shared.team_feed import append_feed, artifact_to_feed_summary, make_feed_message
 from agents.shared.llm import get_chat_model, llm_configured
 from agents.shared.state import MainAgentState, empty_sub_agent_status, new_task_id
 
@@ -144,7 +146,7 @@ def _next_debate_or_synth(state: MainAgentState) -> str:
     intent = state.get("intent", "general")
     planned = state.get("planned_agents") or []
     if intent in DEBATE_CONFIG and any(aid in planned for aid, _ in DEBATE_CONFIG[intent]):
-        return "dispatch_debate"
+        return "debate_opening"
     return "synthesize_judgment"
 
 
@@ -189,33 +191,53 @@ def _cancelled(state: MainAgentState, config: RunnableConfig | None = None) -> b
 
 def prepare_task(state: MainAgentState, config: RunnableConfig) -> dict:
     text = _last_human_text(state)
-    parsed = parse_user_text(text)
+    classified = classify_intent(text)
     now = _now_iso()
     thread_id = _thread_id_from_config(config)
     if thread_id:
         clear_cancelled(thread_id=thread_id)
     sub_status = empty_sub_agent_status(now)
     for row in sub_status:
-        if row["agent_id"] in parsed.planned_agents:
+        if row["agent_id"] in classified.planned_agents:
             row["message"] = "等待 A2A 调度"
+
+    reason = classified.reason or "关键词规则"
+    feed = append_feed(
+        [],
+        make_feed_message(
+            agent_id="finteam_main",
+            content=(
+                f"收到任务，识别为 **{classified.intent}**"
+                + (f"（{classified.symbol_name or classified.symbol}）" if classified.symbol else "")
+                + f"\n{reason}"
+            ),
+            phase="planning",
+        ),
+    )
 
     return {
         "task_id": state.get("task_id") or new_task_id(),
-        "symbol": parsed.symbol,
-        "symbol_name": parsed.symbol_name,
-        "intent": parsed.intent,
+        "symbol": classified.symbol,
+        "symbol_name": classified.symbol_name,
+        "intent": classified.intent,
         "phase": "planning",
         "progress": 10,
-        "planned_agents": parsed.planned_agents,
+        "planned_agents": classified.planned_agents,
         "sub_agent_status": sub_status,
         "artifacts": {},
-        "artifacts_preview": {"user_query": text[:500]},
+        "artifacts_preview": {
+            "user_query": text[:500],
+            "intent_reason": reason,
+            "intent_source": classified.source,
+        },
         "awaiting_human": None,
         "human_decision": None,
         "final_report": None,
         "errors": [],
-        "position": parsed.position or None,
+        "position": classified.position or None,
         "user_cancelled": False,
+        "team_feed": feed,
+        "debate_transcript": {},
     }
 
 
@@ -254,6 +276,7 @@ async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig
     artifacts = dict(state.get("artifacts") or {})
     sub_status = list(state.get("sub_agent_status") or [])
     errors = list(state.get("errors") or [])
+    feed = list(state.get("team_feed") or [])
     work_state = {**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors}
 
     if "data_collector" in state.get("planned_agents", []):
@@ -269,9 +292,17 @@ async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig
             },
         )
         work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+        feed = append_feed(
+            feed,
+            make_feed_message(
+                agent_id="data_collector",
+                content=artifact_to_feed_summary("data_collector", artifacts.get("data_collector")),
+                phase="data",
+            ),
+        )
 
     if _cancelled(state, config):
-        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors, "team_feed": feed})
 
     if "verification" in state.get("planned_agents", []) and artifacts.get("data_collector"):
         artifacts, sub_status, errors = await _run_agent(
@@ -281,9 +312,17 @@ async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig
             {"task_id": state["task_id"], "data_bundle": artifacts["data_collector"]},
         )
         work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+        feed = append_feed(
+            feed,
+            make_feed_message(
+                agent_id="verification",
+                content=artifact_to_feed_summary("verification", artifacts.get("verification")),
+                phase="verify",
+            ),
+        )
 
     if _cancelled(state, config):
-        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
+        return _cancelled_result({**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors, "team_feed": feed})
 
     if "authenticity" in state.get("planned_agents", []) and artifacts.get("verification"):
         artifacts, sub_status, errors = await _run_agent(
@@ -296,6 +335,14 @@ async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig
                 "symbol": state.get("symbol"),
                 "symbol_name": state.get("symbol_name"),
             },
+        )
+        feed = append_feed(
+            feed,
+            make_feed_message(
+                agent_id="authenticity",
+                content=artifact_to_feed_summary("authenticity", artifacts.get("authenticity")),
+                phase="auth",
+            ),
         )
 
     if artifacts.get("authenticity"):
@@ -318,11 +365,20 @@ async def _dispatch_pipeline_async(state: MainAgentState, config: RunnableConfig
             "options": ["continue", "abort"],
             "suspicious_items": suspicious[:5],
         }
+        feed = append_feed(
+            feed,
+            make_feed_message(
+                agent_id="finteam_main",
+                content=f"验真发现 {len(suspicious)} 条存疑信息，等待人工确认是否继续辩论。",
+                phase="auth",
+            ),
+        )
 
     return {
         "artifacts": artifacts,
         "sub_agent_status": sub_status,
         "errors": errors,
+        "team_feed": feed,
         "phase": phase,
         "progress": progress,
         "awaiting_human": awaiting_human,
@@ -342,10 +398,21 @@ def await_human(state: MainAgentState) -> dict:
 
     decision = interrupt(payload)
     normalized = "continue" if decision in ("continue", "继续", True) else "abort"
+    feed = list(state.get("team_feed") or [])
+    if normalized == "continue":
+        feed = append_feed(
+            feed,
+            make_feed_message(
+                agent_id="finteam_main",
+                content="人工确认继续，进入多空辩论。",
+                phase="auth",
+            ),
+        )
 
     return {
         "human_decision": normalized,
         "awaiting_human": None,
+        "team_feed": feed,
         "phase": "debate" if normalized == "continue" else "cancelled",
         "progress": 60 if normalized == "continue" else 100,
     }
@@ -368,61 +435,14 @@ def _cancelled_result(state: MainAgentState, message: str = "用户已取消分�
         "artifacts": state.get("artifacts") or {},
         "sub_agent_status": state.get("sub_agent_status") or [],
         "errors": state.get("errors") or [],
+        "team_feed": state.get("team_feed") or [],
+        "debate_transcript": state.get("debate_transcript") or {},
         "messages": [AIMessage(content=f"已终止：{message}。")],
         "phase": "cancelled",
         "progress": 100,
         "awaiting_human": None,
         "final_report": None,
         "user_cancelled": True,
-    }
-
-
-def dispatch_debate(state: MainAgentState, config: RunnableConfig) -> dict:
-    return _run_async(_dispatch_debate_async(state, config))
-
-
-async def _dispatch_debate_async(state: MainAgentState, config: RunnableConfig | None = None) -> dict:
-    if _cancelled(state, config):
-        return _cancelled_result(state)
-
-    artifacts = dict(state.get("artifacts") or {})
-    sub_status = list(state.get("sub_agent_status") or [])
-    errors = list(state.get("errors") or [])
-    intent = state.get("intent", "buy_analysis")
-    pairs = DEBATE_CONFIG.get(intent, DEBATE_CONFIG["buy_analysis"])
-
-    base_input = {
-        "task_id": state["task_id"],
-        "symbol": state.get("symbol"),
-        "symbol_name": state.get("symbol_name"),
-        "verified_data": artifacts.get("verification"),
-        "position": state.get("position") or {},
-    }
-
-    async def run_one(agent_id: str, skill: str) -> tuple[dict, list, list]:
-        ws = {
-            **state,
-            "artifacts": dict(artifacts),
-            "sub_agent_status": [dict(r) for r in sub_status],
-            "errors": list(errors),
-        }
-        return await _run_agent(ws, agent_id, skill, base_input)
-
-    results = await asyncio.gather(*(run_one(aid, skill) for aid, skill in pairs))
-    for new_arts, new_sts, new_errs in results:
-        artifacts.update(new_arts)
-        errors.extend(new_errs)
-        by_id = {r["agent_id"]: r for r in sub_status}
-        for row in new_sts:
-            by_id[row["agent_id"]] = row
-        sub_status = list(by_id.values())
-
-    return {
-        "artifacts": artifacts,
-        "sub_agent_status": sub_status,
-        "errors": errors,
-        "phase": "debate",
-        "progress": 75,
     }
 
 
@@ -573,5 +593,7 @@ def persist_task(state: MainAgentState) -> dict:
         sub_agent_status=state.get("sub_agent_status"),
         human_decision=state.get("human_decision"),
         errors=state.get("errors"),
+        team_feed=state.get("team_feed"),
+        debate_transcript=state.get("debate_transcript"),
     )
     return {}

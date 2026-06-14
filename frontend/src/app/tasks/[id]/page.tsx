@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AgentStatusPanel } from "@/components/AgentStatusPanel";
-import { DebatePanel } from "@/components/DebatePanel";
-import { FinalReportPanel } from "@/components/FinalReportPanel";
+import { TeamGroupChat, type TeamFeedMessage } from "@/components/TeamGroupChat";
 import { fetchTask } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -26,18 +24,8 @@ export default async function TaskReplayPage({
     notFound();
   }
 
-  const replayState = {
-    task_id: task.task_id,
-    symbol: task.symbol,
-    symbol_name: task.symbol_name,
-    intent: task.intent,
-    phase: task.phase,
-    progress: task.phase === "done" ? 100 : 0,
-    planned_agents: Object.keys(task.artifacts ?? {}),
-    sub_agent_status: task.sub_agent_status,
-    artifacts: task.artifacts,
-    final_report: task.final_report,
-  };
+  const teamFeed = (task.team_feed ?? []) as TeamFeedMessage[];
+  const progress = task.phase === "done" ? 100 : 0;
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-8">
@@ -59,12 +47,16 @@ export default async function TaskReplayPage({
         <p className="text-[10px] text-zinc-400">task_id: {task.task_id}</p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
-        <AgentStatusPanel state={replayState} />
-        <div className="flex flex-col gap-4">
-          <DebatePanel state={replayState} />
-          <FinalReportPanel report={task.final_report} />
-        </div>
+      <div className="flex flex-col gap-4 lg:flex-row">
+        <TeamGroupChat feed={teamFeed} progress={progress} phase={task.phase} />
+        {task.final_report?.content && (
+          <section className="min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-zinc-900">终裁报告</h2>
+            <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700">
+              {task.final_report.content}
+            </pre>
+          </section>
+        )}
       </div>
 
       {task.artifact_chain && task.artifact_chain.length > 0 && (

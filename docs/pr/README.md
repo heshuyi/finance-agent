@@ -14,11 +14,12 @@
 | [PR-008](PR-008-历史对话SQLite持久化.md) | `feat/pr008-chat-sqlite` | [#8](https://github.com/heshuyi/finance-agent/pull/8) | M3+ | 已合并 |
 | GitNexus 接入 | `feat/gitnexus` | [#9](https://github.com/heshuyi/finance-agent/pull/9) | 工具 | 已合并 |
 | [PR-010](PR-010-A股免费数据与研判增强.md) | `feat/pr010-a-share-free-data` | [#10](https://github.com/heshuyi/finance-agent/pull/10) | M4 | 已合并 |
+| [PR-011](PR-011-智能意图与多轮群聊辩论.md) | `feat/pr011-debate-groupchat` | [#11](https://github.com/heshuyi/finance-agent/pull/11) | M5 | 待合并（验收已通过） |
 
 ## 合并顺序
 
 ```
-PR-001 → … → PR-008 → PR-009 → PR-010
+PR-001 → … → PR-010 → PR-011
 ```
 
 ## 规范
