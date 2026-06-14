@@ -92,7 +92,17 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     db = conn or get_connection()
     try:
         db.executescript(SCHEMA_SQL)
+        _migrate_tasks_columns(db)
         db.commit()
     finally:
         if owns:
             db.close()
+
+
+def _migrate_tasks_columns(db: sqlite3.Connection) -> None:
+    """为已有库追加 M5 群聊字段。"""
+    cols = {row[1] for row in db.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "team_feed" not in cols:
+        db.execute("ALTER TABLE tasks ADD COLUMN team_feed TEXT")
+    if "debate_transcript" not in cols:
+        db.execute("ALTER TABLE tasks ADD COLUMN debate_transcript TEXT")

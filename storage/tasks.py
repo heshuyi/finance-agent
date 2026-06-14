@@ -36,6 +36,8 @@ def save_task_record(
     sub_agent_status: list[dict] | None,
     human_decision: str | None,
     errors: list[dict] | None,
+    team_feed: list[dict] | None = None,
+    debate_transcript: dict | None = None,
 ) -> None:
     init_db()
     now = _now_iso()
@@ -52,8 +54,8 @@ def save_task_record(
             INSERT INTO tasks (
                 task_id, symbol, symbol_name, intent, phase, user_query,
                 final_report, artifacts, sub_agent_status, human_decision,
-                errors, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                errors, team_feed, debate_transcript, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 symbol = excluded.symbol,
                 symbol_name = excluded.symbol_name,
@@ -65,6 +67,8 @@ def save_task_record(
                 sub_agent_status = excluded.sub_agent_status,
                 human_decision = excluded.human_decision,
                 errors = excluded.errors,
+                team_feed = excluded.team_feed,
+                debate_transcript = excluded.debate_transcript,
                 updated_at = excluded.updated_at
             """,
             (
@@ -79,6 +83,8 @@ def save_task_record(
                 _json_dumps(sub_agent_status or []),
                 human_decision,
                 _json_dumps(errors or []),
+                _json_dumps(team_feed or []),
+                _json_dumps(debate_transcript or {}),
                 created_at,
                 now,
             ),
@@ -175,6 +181,8 @@ def get_task(task_id: str) -> Optional[dict[str, Any]]:
             "sub_agent_status": _json_loads(row["sub_agent_status"]) or [],
             "human_decision": row["human_decision"],
             "errors": _json_loads(row["errors"]) or [],
+            "team_feed": _json_loads(row["team_feed"]) if "team_feed" in row.keys() else [],
+            "debate_transcript": _json_loads(row["debate_transcript"]) if "debate_transcript" in row.keys() else {},
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

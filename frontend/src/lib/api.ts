@@ -12,12 +12,24 @@ export type TaskSummary = {
   updated_at?: string;
 };
 
+export type TeamFeedMessage = {
+  id: string;
+  agent_id: string;
+  display_name: string;
+  role: string;
+  phase: string;
+  round?: number;
+  content: string;
+  created_at: string;
+};
+
 export type TaskDetail = TaskSummary & {
   final_report?: {
     content?: string;
     disclaimer?: string;
     intent?: string;
     debate?: Record<string, unknown>;
+    arbitration?: Record<string, unknown>;
   } | null;
   artifacts?: Record<string, unknown>;
   artifact_chain?: unknown[];
@@ -28,6 +40,8 @@ export type TaskDetail = TaskSummary & {
   }>;
   human_decision?: string | null;
   errors?: unknown[];
+  team_feed?: TeamFeedMessage[];
+  debate_transcript?: Record<string, unknown>;
 };
 
 export async function fetchTasks(limit = 20): Promise<{
