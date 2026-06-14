@@ -16,6 +16,9 @@ dependencies = [
     "httpx>=0.28.0",
     "langgraph-checkpoint-sqlite>=3.0.0",
     "aiosqlite>=0.20.0",
+    "akshare>=1.16.0",
+    "pandas>=2.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]

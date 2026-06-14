@@ -51,6 +51,6 @@ def build_main_graph(checkpointer: BaseCheckpointSaver):
     graph.add_edge("synthesize_judgment", "persist_task")
     graph.add_edge("cancel_task", "persist_task")
     graph.add_edge("persist_task", END)
-    graph.add_edge("chat_response", END)
+    graph.add_edge("chat_response", "persist_task")
 
     return graph.compile(checkpointer=checkpointer)

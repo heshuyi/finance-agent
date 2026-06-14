@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS artifacts (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id);
+
+CREATE TABLE IF NOT EXISTS content_cache (
+    cache_key TEXT PRIMARY KEY,
+    cache_type TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_content_cache_symbol ON content_cache(symbol, cache_type);
+CREATE INDEX IF NOT EXISTS idx_content_cache_fetched_at ON content_cache(fetched_at DESC);
 """
 
 

@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useCoAgent } from "@copilotkit/react-core";
 import { fetchTasks, type TaskSummary } from "@/lib/api";
+import { ChatThreadSidebar } from "./ChatThreadSidebar";
 
 const INTENT_LABELS: Record<string, string> = {
   buy_analysis: "买入研判",
@@ -31,44 +33,48 @@ function formatTime(iso?: string) {
   }
 }
 
-export function HistorySidebar() {
+function TaskHistoryList() {
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchTasks(30)
-      .then((data) => {
-        if (!cancelled) setTasks(data.tasks);
-      })
-      .catch((err: Error) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const refresh = useCallback(async () => {
+    try {
+      const data = await fetchTasks(30);
+      setTasks(data.tasks);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载失败");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  const { state } = useCoAgent<{ phase?: string }>({ name: "finteam_main" });
+
+  useEffect(() => {
+    refresh();
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (state?.phase === "done" || state?.phase === "cancelled") {
+      refresh();
+      window.dispatchEvent(new CustomEvent("finteam:task-completed"));
+    }
+  }, [state?.phase, refresh]);
+
   return (
-    <aside className="w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:w-72 lg:shrink-0">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-zinc-900">历史研判</h2>
-        <span className="text-[10px] text-zinc-400">M3</span>
-      </div>
-      <p className="mt-1 text-xs text-zinc-500">完整研判结束后自动入库</p>
-
-      {loading && <p className="mt-4 text-xs text-zinc-400">加载中…</p>}
-      {error && <p className="mt-4 text-xs text-red-500">{error}</p>}
-
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-zinc-500">研判与快问快答结束后自动入库</p>
+      {loading && <p className="text-xs text-zinc-400">加载中…</p>}
+      {error && <p className="text-xs text-red-500">{error}</p>}
       {!loading && !error && tasks.length === 0 && (
-        <p className="mt-4 text-xs text-zinc-400">暂无历史记录</p>
+        <p className="text-xs text-zinc-400">暂无历史记录</p>
       )}
-
-      <ul className="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
+      <ul className="max-h-[28vh] space-y-2 overflow-y-auto lg:max-h-[50vh]">
         {tasks.map((task) => (
           <li key={task.task_id}>
             <Link
@@ -98,6 +104,50 @@ export function HistorySidebar() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+type Tab = "chat" | "tasks";
+
+export function HistorySidebar() {
+  const [tab, setTab] = useState<Tab>("chat");
+
+  return (
+    <aside className="w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm lg:w-72 lg:shrink-0">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-zinc-900">历史</h2>
+        <span className="text-[10px] text-zinc-400">PR-007</span>
+      </div>
+
+      <div className="mt-3 flex rounded-lg border border-zinc-100 p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setTab("chat")}
+          className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
+            tab === "chat"
+              ? "bg-emerald-600 text-white"
+              : "text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          历史对话
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("tasks")}
+          className={`flex-1 rounded-md px-2 py-1.5 font-medium transition ${
+            tab === "tasks"
+              ? "bg-emerald-600 text-white"
+              : "text-zinc-600 hover:bg-zinc-50"
+          }`}
+        >
+          历史研判
+        </button>
+      </div>
+
+      <div className="mt-4">
+        {tab === "chat" ? <ChatThreadSidebar /> : <TaskHistoryList />}
+      </div>
     </aside>
   );
 }
