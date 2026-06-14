@@ -48,7 +48,7 @@ def health():
     return {
         "status": "ok",
         "agent": AGENT_NAME,
-        "milestone": "M1",
+        "milestone": "M2",
         "llm": llm_provider_label() if llm_configured() else "未配置",
     }
 
