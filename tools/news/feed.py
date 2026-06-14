@@ -1,10 +1,11 @@
-"""资讯聚合 — 爬虫 + API 多源合并（带本地缓存）。"""
+"""资讯聚合 — 授权 API 优先，公开列表接口可选（带本地缓存）。"""
 
 from __future__ import annotations
 
 from agents.shared.artifact import now_iso
 from tools.cache import fetch_with_cache
-from tools.news.crawler.eastmoney import crawl_eastmoney_stock_news
+from tools.news.crawler.base import NEWS_FETCH_ENABLED
+from tools.news.crawler.eastmoney import fetch_eastmoney_stock_news
 from tools.news.finnhub import fetch_finnhub_news
 from tools.news.merge import merge_news_items
 from tools.symbols import resolve_a_share
@@ -12,17 +13,8 @@ from tools.types import ToolResult
 
 
 def _fetch_live_news(symbol: str, symbol_name: str, *, limit: int) -> ToolResult:
-    errors = []
+    errors: list = []
     sources: list[str] = []
-
-    crawled = crawl_eastmoney_stock_news(symbol, symbol_name, limit=limit)
-    if crawled.ok:
-        crawler_items = crawled.data.get("items") or []
-        if crawler_items:
-            sources.append("EastMoney")
-    else:
-        errors.extend(crawled.errors)
-        crawler_items = []
 
     finnhub = fetch_finnhub_news(symbol, limit=limit)
     if finnhub.ok and finnhub.data.get("mode") == "live":
@@ -34,7 +26,17 @@ def _fetch_live_news(symbol: str, symbol_name: str, *, limit: int) -> ToolResult
             errors.extend(finnhub.errors)
         finnhub_items = []
 
-    items = merge_news_items(crawler_items, finnhub_items, limit=limit)
+    public_items: list = []
+    if NEWS_FETCH_ENABLED:
+        public = fetch_eastmoney_stock_news(symbol, symbol_name, limit=limit)
+        if public.ok:
+            public_items = public.data.get("items") or []
+            if public_items:
+                sources.append("EastMoney")
+        else:
+            errors.extend(public.errors)
+
+    items = merge_news_items(public_items, finnhub_items, limit=limit)
 
     if items:
         mode = "live"
@@ -42,8 +44,8 @@ def _fetch_live_news(symbol: str, symbol_name: str, *, limit: int) -> ToolResult
     else:
         mode = "empty"
         hint = (
-            "未获取到新闻：可检查网络或开启 NEWS_CRAWLER_ENABLED；"
-            "亦可配置 FINNHUB_API_KEY 作为补充源"
+            "未获取到资讯：建议配置 FINNHUB_API_KEY（授权 API）；"
+            "或在确认合规前提下设置 NEWS_FETCH_ENABLED=true 启用东方财富公开列表接口"
         )
 
     result = ToolResult.success(
@@ -54,8 +56,8 @@ def _fetch_live_news(symbol: str, symbol_name: str, *, limit: int) -> ToolResult
             "source": "+".join(sources) if sources else "none",
             "mode": mode,
             "hint": hint,
-            "crawler_count": len(crawler_items),
-            "api_count": len(finnhub_items),
+            "public_api_count": len(public_items),
+            "licensed_api_count": len(finnhub_items),
         },
         source="+".join(sources) if sources else "NewsAggregator",
         fetched_at=now_iso(),

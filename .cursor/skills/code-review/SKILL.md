@@ -46,11 +46,14 @@ description: >-
 - [ ] Tool failures degrade gracefully (no crash, user gets message)
 - [ ] Cache TTL respected; stale data not served past `CONTENT_CACHE_TTL_DAYS`
 
-### Security
+### Security & Compliance
 - [ ] No secrets in code or committed `.env`
 - [ ] API keys only via env vars documented in `.env.example`
 - [ ] User input (symbol) validated before external fetch
-- [ ] No SSRF from crawler URL construction
+- [ ] No SSRF from news article URL fetch (whitelist domains only)
+- [ ] `NEWS_FETCH_ENABLED` defaults false; `FILINGS_FETCH_ENABLED` independent of news
+- [ ] `ai_context` includes data-use compliance notice; user output has disclaimer
+- [ ] Ashare web-scrape not in default `auto` provider chain
 
 ### Scope & Quality
 - [ ] Changes match stated PR scope; no unrelated refactors

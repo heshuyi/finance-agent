@@ -124,7 +124,6 @@ def _market_provider_chain(resolved: ResolvedSymbol) -> list[tuple[str, Callable
         return [("iTick", lambda: _fetch_itick_market(resolved))]
     return [
         ("AKShare", lambda: fetch_akshare_market(resolved)),
-        ("Ashare", lambda: fetch_ashare_market(resolved)),
         ("iTick", lambda: _fetch_itick_market(resolved)),
     ]
 

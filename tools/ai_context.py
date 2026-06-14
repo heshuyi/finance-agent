@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from tools.compliance import DATA_USE_NOTICE
+
 
 def _fmt_num(value: Any, *, suffix: str = "") -> str:
     if value is None:
@@ -107,4 +109,5 @@ def build_analysis_context(
     if filings:
         sections.append(build_filings_context(filings))
     sections.append("=== 请基于以上事实进行分析，标注数据来源；无法确认处请明确说明 ===")
+    sections.append(f"【合规说明】{DATA_USE_NOTICE}")
     return "\n\n".join(sections)

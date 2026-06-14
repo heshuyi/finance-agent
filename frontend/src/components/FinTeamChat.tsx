@@ -37,7 +37,7 @@ export function FinTeamChat() {
               labels={{
                 title: "FinTeam Agent",
                 initial:
-                  "你好，我是 FinTeam 主 Agent。\n\n你可以问我：\n- 分析贵州茅台是否值得买入\n- 查一下 600519 最新行情\n- 600519 最近有什么公告和新闻\n\n也可直接说「查行情」「看公告」——我会调用本地 Tool 优先读缓存数据。",
+                  "你好，我是 FinTeam 主 Agent（个人投研辅助，不构成投资建议）。\n\n你可以问我：\n- 分析贵州茅台是否值得买入\n- 查一下 600519 最新行情\n- 600519 最近有什么法定公告\n\n行情来自 AKShare 等公开数据；资讯建议配置 FINNHUB_API_KEY；公告来自巨潮法定披露平台。",
                 placeholder: "输入投研问题，例如：分析茅台（600519）是否值得买入",
               }}
             />

@@ -1,4 +1,4 @@
-"""巨潮资讯公告爬虫 Tool。"""
+"""巨潮资讯 — 法定信息披露公开查询接口。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import httpx
 
 from agents.shared.artifact import now_iso
 from tools.cache import fetch_with_cache
-from tools.news.crawler.base import CRAWLER_ENABLED, crawler_client
+from tools.news.crawler.base import FILINGS_FETCH_ENABLED, throttle_request
 from tools.symbols import ResolvedSymbol, resolve_a_share
 from tools.types import ToolResult
 
@@ -23,7 +23,8 @@ CNINFO_PDF_BASE = "http://static.cninfo.com.cn/"
 @lru_cache(maxsize=1)
 def _load_cninfo_stock_index() -> dict[str, dict[str, str]]:
     try:
-        with crawler_client() as client:
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            throttle_request()
             response = client.get(CNINFO_STOCK_LIST_URL)
         if response.status_code != 200:
             return {}
@@ -66,8 +67,11 @@ def _format_announcement_time(ms: int | None) -> str | None:
 
 
 def _fetch_live_filings(symbol: str, symbol_name: str, *, limit: int) -> ToolResult:
-    if not CRAWLER_ENABLED:
-        return ToolResult.success({"items": [], "mode": "disabled"}, source="CNINFO")
+    if not FILINGS_FETCH_ENABLED:
+        return ToolResult.success(
+            {"items": [], "mode": "disabled", "hint": "FILINGS_FETCH_ENABLED 未开启"},
+            source="CNINFO",
+        )
 
     resolved = resolve_a_share(symbol, symbol_name)
     end = date.today()
@@ -93,6 +97,7 @@ def _fetch_live_filings(symbol: str, symbol_name: str, *, limit: int) -> ToolRes
 
     try:
         with httpx.Client(timeout=15.0, headers=headers, follow_redirects=True) as client:
+            throttle_request()
             response = client.post(CNINFO_QUERY_URL, data=payload)
     except httpx.HTTPError as exc:
         return ToolResult.failure("CNINFO_NETWORK", str(exc), source="CNINFO")
@@ -126,6 +131,7 @@ def _fetch_live_filings(symbol: str, symbol_name: str, *, limit: int) -> ToolRes
             "items": items,
             "mode": "live",
             "source": "CNINFO",
+            "source_type": "statutory_disclosure",
         },
         source="CNINFO",
         fetched_at=now_iso(),

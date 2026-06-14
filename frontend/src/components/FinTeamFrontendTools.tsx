@@ -60,7 +60,7 @@ export function FinTeamFrontendTools() {
 
   useFrontendTool({
     name: "get_stock_filings",
-    description: "获取标的近期交易所公告事实（供 AI 合规与事件分析）",
+    description: "获取标的近期法定信息披露（巨潮资讯公开接口，供 AI 事件分析）",
     parameters: [
       { name: "symbol", type: "string", description: "A 股 6 位代码", required: true },
       { name: "symbol_name", type: "string", description: "标的名称", required: false },

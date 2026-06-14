@@ -1,4 +1,4 @@
-"""东方财富个股资讯爬虫。"""
+"""东方财富个股资讯 — 公开列表 JSON 接口（非页面爬取）。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,14 @@ from typing import Any
 import httpx
 
 from agents.shared.artifact import now_iso
-from tools.news.crawler.base import CRAWLER_ENABLED, DIGEST_LIMIT, FETCH_DIGEST, crawler_client
+from tools.compliance import is_allowed_news_article_url
+from tools.news.crawler.base import (
+    DIGEST_LIMIT,
+    FETCH_DIGEST,
+    NEWS_FETCH_ENABLED,
+    data_client,
+    throttle_request,
+)
 from tools.news.merge import normalize_item
 from tools.symbols import ResolvedSymbol, resolve_a_share
 from tools.types import ToolResult
@@ -22,9 +29,11 @@ def _eastmoney_market_code(resolved: ResolvedSymbol) -> str:
 
 
 def _fetch_article_digest(client: httpx.Client, url: str) -> str:
-    if not url:
+    """仅对白名单域抓取 meta description，且需用户显式开启 NEWS_FETCH_DIGEST。"""
+    if not url or not is_allowed_news_article_url(url):
         return ""
     try:
+        throttle_request()
         response = client.get(url)
     except httpx.HTTPError:
         return ""
@@ -36,21 +45,20 @@ def _fetch_article_digest(client: httpx.Client, url: str) -> str:
     return match.group(1).strip()[:400]
 
 
-def crawl_eastmoney_stock_news(
+def fetch_eastmoney_stock_news(
     symbol: str,
     symbol_name: str = "",
     *,
     limit: int = 10,
 ) -> ToolResult:
     """
-    爬取东方财富个股相关新闻列表。
+    调用东方财富个股资讯公开列表接口。
 
-    接口来源：个股资讯列表 JSON API（非浏览器模拟），字段含标题、媒体、发布时间、原文链接。
-    可选抓取文章页 meta description 作为摘要。
+    仅获取标题、媒体、发布时间、原文链接；正文摘要需显式开启且限于白名单域名。
     """
-    if not CRAWLER_ENABLED:
+    if not NEWS_FETCH_ENABLED:
         return ToolResult.success(
-            {"items": [], "mode": "disabled"},
+            {"items": [], "mode": "disabled", "hint": "NEWS_FETCH_ENABLED 未开启"},
             source="EastMoney",
         )
 
@@ -64,10 +72,11 @@ def crawl_eastmoney_stock_news(
     }
 
     try:
-        with crawler_client() as client:
+        with data_client() as client:
             client.headers["Referer"] = "https://finance.eastmoney.com/"
+            throttle_request()
             response = client.get(EASTMONEY_LIST_URL, params=params)
-    except Exception as exc:  # httpx + network
+    except Exception as exc:
         return ToolResult.failure("EASTMONEY_NETWORK", str(exc), source="EastMoney")
 
     if response.status_code != 200:
@@ -88,7 +97,7 @@ def crawl_eastmoney_stock_news(
     raw_list: list[dict[str, Any]] = (payload.get("data") or {}).get("list") or []
     items: list[dict[str, Any]] = []
 
-    with crawler_client() as client:
+    with data_client() as client:
         client.headers["Referer"] = "https://finance.eastmoney.com/"
         for idx, row in enumerate(raw_list[:limit]):
             url = row.get("Art_Url") or row.get("Art_OriginUrl") or ""
@@ -113,8 +122,12 @@ def crawl_eastmoney_stock_news(
             "symbol_name": resolved.name or symbol_name,
             "items": items,
             "mode": "live",
-            "crawler": "eastmoney",
+            "source_type": "public_list_api",
         },
         source="EastMoney",
         fetched_at=now_iso(),
     )
+
+
+# 兼容旧函数名
+crawl_eastmoney_stock_news = fetch_eastmoney_stock_news
