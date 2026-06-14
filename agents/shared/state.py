@@ -33,6 +33,7 @@ class MainAgentState(TypedDict):
     sub_agent_status: list[SubAgentStatus]
     artifacts: dict
     artifacts_preview: dict
+    awaiting_human: Optional[dict]
     human_decision: Optional[str]
     final_report: Optional[dict]
     errors: list[dict]

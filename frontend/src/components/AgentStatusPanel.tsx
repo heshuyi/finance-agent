@@ -15,6 +15,11 @@ type AgentState = {
   progress?: number;
   sub_agent_status?: SubAgentStatus[];
   planned_agents?: string[];
+  awaiting_human?: {
+    reason?: string;
+    options?: string[];
+    suspicious_items?: string[];
+  } | null;
 };
 
 const AGENT_LABELS: Record<string, string> = {
@@ -101,6 +106,13 @@ export function AgentStatusPanel({ state }: { state: AgentState }) {
           );
         })}
       </div>
+
+      {state.awaiting_human && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-medium text-amber-800">等待人工确认</p>
+          <p className="mt-1 text-xs text-amber-700">{state.awaiting_human.reason}</p>
+        </div>
+      )}
 
       {state.task_id && (
         <p className="break-all text-[10px] text-zinc-400">task: {state.task_id}</p>

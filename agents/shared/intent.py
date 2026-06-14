@@ -41,7 +41,7 @@ def parse_user_text(text: str) -> ParsedIntent:
 
     if any(k in text for k in ("卖出", "减仓", "清仓", "止盈")):
         intent: Intent = "sell_analysis"
-        planned = ["data_collector", "verification", "pro_sell", "anti_sell"]
+        planned = ["data_collector", "verification", "authenticity", "pro_sell", "anti_sell"]
     elif any(k in text for k in ("核实", "验真", "真假", "是否真实")):
         intent = "verify_only"
         planned = ["data_collector", "verification", "authenticity"]
@@ -50,13 +50,13 @@ def parse_user_text(text: str) -> ParsedIntent:
         planned = ["data_collector", "verification"]
     elif any(k in text for k in ("买入", "值得买", "能不能买", "分析")):
         intent = "buy_analysis"
-        planned = ["data_collector", "verification", "pro_buy", "anti_buy"]
+        planned = ["data_collector", "verification", "authenticity", "pro_buy", "anti_buy"]
     else:
         intent = "general"
         planned = []
 
     if "持仓" in text and intent == "general":
         intent = "sell_analysis"
-        planned = ["data_collector", "verification", "pro_sell", "anti_sell"]
+        planned = ["data_collector", "verification", "authenticity", "pro_sell", "anti_sell"]
 
     return ParsedIntent(intent=intent, symbol=symbol, symbol_name=symbol_name, planned_agents=planned)

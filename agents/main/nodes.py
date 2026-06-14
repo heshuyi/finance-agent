@@ -1,13 +1,13 @@
-"""MainAgent LangGraph nodes — M1 A2A 调度。"""
+"""MainAgent LangGraph nodes — M2 A2A + HITL。"""
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import os
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.types import interrupt
 
 from a2a.client import send_task_async
 from a2a.types import TaskStatus
@@ -19,7 +19,7 @@ from agents.shared.state import MainAgentState, empty_sub_agent_status, new_task
 PIPELINE_INTENTS = {"buy_analysis", "sell_analysis", "verify_only", "data_query"}
 
 SYSTEM_PROMPT = """你是 FinTeam Agent 的主编排 Agent（投研团队负责人）。
-你已调度数据、核查、辩论子 Agent 完成分析，请基于提供的 Artifact 摘要给出综合研判。
+你已调度数据、核查、验真、辩论子 Agent 完成分析，请基于提供的 Artifact 摘要给出综合研判。
 
 硬性规则：
 - 不构成投资建议，末尾附免责声明
@@ -28,7 +28,16 @@ SYSTEM_PROMPT = """你是 FinTeam Agent 的主编排 Agent（投研团队负责�
 - 语气专业、简洁
 """
 
-DEBATE_AGENTS = ("pro_buy", "anti_buy")
+DEBATE_CONFIG: dict[str, list[tuple[str, str]]] = {
+    "buy_analysis": [
+        ("pro_buy", "bull-case"),
+        ("anti_buy", "bear-case-no-buy"),
+    ],
+    "sell_analysis": [
+        ("pro_sell", "bull-sell-case"),
+        ("anti_sell", "bear-hold-case"),
+    ],
+}
 
 
 def _run_async(coro):
@@ -69,12 +78,39 @@ def _set_agent_status(
             row["updated_at"] = now
 
 
+def _auth_needs_human(state: MainAgentState) -> bool:
+    if state.get("human_decision"):
+        return False
+    auth = (state.get("artifacts") or {}).get("authenticity") or {}
+    return bool(auth.get("metadata", {}).get("has_suspicious"))
+
+
+def _next_debate_or_synth(state: MainAgentState) -> str:
+    intent = state.get("intent", "general")
+    planned = state.get("planned_agents") or []
+    if intent in DEBATE_CONFIG and any(aid in planned for aid, _ in DEBATE_CONFIG[intent]):
+        return "dispatch_debate"
+    return "synthesize_judgment"
+
+
 def should_run_pipeline(state: MainAgentState) -> str:
     intent = state.get("intent", "general")
     planned = state.get("planned_agents") or []
     if intent in PIPELINE_INTENTS and planned:
         return "dispatch_pipeline"
     return "chat_response"
+
+
+def should_after_pipeline(state: MainAgentState) -> str:
+    if _auth_needs_human(state):
+        return "await_human"
+    return _next_debate_or_synth(state)
+
+
+def should_after_await_human(state: MainAgentState) -> str:
+    if state.get("human_decision") == "abort":
+        return "cancel_task"
+    return _next_debate_or_synth(state)
 
 
 def prepare_task(state: MainAgentState) -> dict:
@@ -97,6 +133,7 @@ def prepare_task(state: MainAgentState) -> dict:
         "sub_agent_status": sub_status,
         "artifacts": {},
         "artifacts_preview": {"user_query": text[:500]},
+        "awaiting_human": None,
         "human_decision": None,
         "final_report": None,
         "errors": [],
@@ -157,22 +194,77 @@ async def _dispatch_pipeline_async(state: MainAgentState) -> dict:
             "cross-verify-data",
             {"task_id": state["task_id"], "data_bundle": artifacts["data_collector"]},
         )
+        work_state.update({"artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors})
 
-    phase = "verify" if artifacts.get("verification") else "data"
-    progress = 45 if phase == "verify" else 30
+    if "authenticity" in state.get("planned_agents", []) and artifacts.get("verification"):
+        artifacts, sub_status, errors = await _run_agent(
+            {**work_state, "sub_agent_status": sub_status, "artifacts": artifacts, "errors": errors},
+            "authenticity",
+            "verify-authenticity",
+            {"task_id": state["task_id"], "verified_data": artifacts["verification"]},
+        )
+
+    if artifacts.get("authenticity"):
+        phase = "auth"
+        progress = 55
+    elif artifacts.get("verification"):
+        phase = "verify"
+        progress = 45
+    else:
+        phase = "data"
+        progress = 30
+
+    auth = artifacts.get("authenticity") or {}
+    awaiting_human = None
+    if auth.get("metadata", {}).get("has_suspicious"):
+        items = auth.get("metadata", {}).get("items") or []
+        suspicious = [i["statement"] for i in items if i.get("status") == "suspicious"]
+        awaiting_human = {
+            "reason": "验真发现存疑信息，需人工确认是否继续",
+            "options": ["continue", "abort"],
+            "suspicious_items": suspicious[:5],
+        }
+
     return {
         "artifacts": artifacts,
         "sub_agent_status": sub_status,
         "errors": errors,
         "phase": phase,
         "progress": progress,
+        "awaiting_human": awaiting_human,
     }
 
 
-def should_run_debate(state: MainAgentState) -> str:
-    if state.get("intent") == "buy_analysis" and "pro_buy" in (state.get("planned_agents") or []):
-        return "dispatch_debate"
-    return "synthesize_judgment"
+def await_human(state: MainAgentState) -> dict:
+    """LangGraph interrupt — 验真存疑时等待用户确认。"""
+    auth = (state.get("artifacts") or {}).get("authenticity") or {}
+    items = auth.get("metadata", {}).get("items") or []
+    suspicious = [i["statement"] for i in items if i.get("status") == "suspicious"]
+    payload = state.get("awaiting_human") or {
+        "reason": "验真发现存疑信息，是否继续后续辩论与终裁？",
+        "suspicious_items": suspicious[:5],
+        "options": ["continue", "abort"],
+    }
+
+    decision = interrupt(payload)
+    normalized = "continue" if decision in ("continue", "继续", True) else "abort"
+
+    return {
+        "human_decision": normalized,
+        "awaiting_human": None,
+        "phase": "debate" if normalized == "continue" else "cancelled",
+        "progress": 60 if normalized == "continue" else 100,
+    }
+
+
+def cancel_task(state: MainAgentState) -> dict:
+    return {
+        "messages": [AIMessage(content="已终止：验真存疑项未通过人工确认，本次分析已取消。")],
+        "phase": "cancelled",
+        "progress": 100,
+        "awaiting_human": None,
+        "final_report": None,
+    }
 
 
 def dispatch_debate(state: MainAgentState) -> dict:
@@ -183,6 +275,9 @@ async def _dispatch_debate_async(state: MainAgentState) -> dict:
     artifacts = dict(state.get("artifacts") or {})
     sub_status = list(state.get("sub_agent_status") or [])
     errors = list(state.get("errors") or [])
+    intent = state.get("intent", "buy_analysis")
+    pairs = DEBATE_CONFIG.get(intent, DEBATE_CONFIG["buy_analysis"])
+
     base_input = {
         "task_id": state["task_id"],
         "symbol": state.get("symbol"),
@@ -190,15 +285,23 @@ async def _dispatch_debate_async(state: MainAgentState) -> dict:
         "verified_data": artifacts.get("verification"),
     }
 
-    async def run_one(agent_id: str, skill: str) -> None:
-        nonlocal artifacts, sub_status, errors
-        ws = {**state, "artifacts": artifacts, "sub_agent_status": sub_status, "errors": errors}
-        artifacts, sub_status, errors = await _run_agent(ws, agent_id, skill, base_input)
+    async def run_one(agent_id: str, skill: str) -> tuple[dict, list, list]:
+        ws = {
+            **state,
+            "artifacts": dict(artifacts),
+            "sub_agent_status": [dict(r) for r in sub_status],
+            "errors": list(errors),
+        }
+        return await _run_agent(ws, agent_id, skill, base_input)
 
-    await asyncio.gather(
-        run_one("pro_buy", "bull-case"),
-        run_one("anti_buy", "bear-case-no-buy"),
-    )
+    results = await asyncio.gather(*(run_one(aid, skill) for aid, skill in pairs))
+    for new_arts, new_sts, new_errs in results:
+        artifacts.update(new_arts)
+        errors.extend(new_errs)
+        by_id = {r["agent_id"]: r for r in sub_status}
+        for row in new_sts:
+            by_id[row["agent_id"]] = row
+        sub_status = list(by_id.values())
 
     return {
         "artifacts": artifacts,
@@ -219,6 +322,7 @@ def synthesize_judgment(state: MainAgentState) -> dict:
     artifact_text = "\n\n".join(summary_lines) or "（无子 Agent 输出）"
     text = _last_human_text(state)
     symbol_label = state.get("symbol_name") or state.get("symbol") or "标的"
+    intent = state.get("intent", "general")
 
     if llm_configured():
         model = get_chat_model()
@@ -226,7 +330,7 @@ def synthesize_judgment(state: MainAgentState) -> dict:
             SystemMessage(content=SYSTEM_PROMPT),
             HumanMessage(
                 content=(
-                    f"用户问题：{text}\n标的：{symbol_label}\n\n"
+                    f"用户问题：{text}\n标的：{symbol_label}\n意图：{intent}\n\n"
                     f"子 Agent Artifact 摘要：\n{artifact_text}\n\n"
                     "请输出：一句话结论、已验证事实、多方观点、核心分歧、未决问题、免责声明。"
                 )
@@ -236,20 +340,36 @@ def synthesize_judgment(state: MainAgentState) -> dict:
     else:
         pro = artifacts.get("pro_buy", {}).get("metadata", {}).get("thesis", "")
         anti = artifacts.get("anti_buy", {}).get("metadata", {}).get("thesis", "")
+        pro_sell = artifacts.get("pro_sell", {}).get("metadata", {}).get("thesis", "")
+        anti_sell = artifacts.get("anti_sell", {}).get("metadata", {}).get("thesis", "")
         content = (
             f"## 综合研判：{symbol_label}\n\n"
             f"**一句话结论（倾向性，非投资建议）**：多空存在分歧，建议结合估值与持仓自行判断。\n\n"
-            f"**支持买入**：{pro or '见 pro_buy Artifact'}\n\n"
-            f"**不建议买入**：{anti or '见 anti_buy Artifact'}\n\n"
-            f"**子 Agent 输出摘要**：\n{artifact_text}\n\n"
-            f"免责声明：{DISCLAIMER}"
         )
+        if intent == "sell_analysis":
+            content += (
+                f"**建议卖出**：{pro_sell or '见 pro_sell Artifact'}\n\n"
+                f"**建议持有**：{anti_sell or '见 anti_sell Artifact'}\n\n"
+            )
+        elif intent == "buy_analysis":
+            content += (
+                f"**支持买入**：{pro or '见 pro_buy Artifact'}\n\n"
+                f"**不建议买入**：{anti or '见 anti_buy Artifact'}\n\n"
+            )
+        content += f"**子 Agent 输出摘要**：\n{artifact_text}\n\n免责声明：{DISCLAIMER}"
 
     final_report = {
         "symbol": symbol_label,
         "task_id": state["task_id"],
+        "intent": intent,
         "content": content,
         "artifacts": {k: v.get("artifact_id") for k, v in artifacts.items()},
+        "debate": {
+            "pro_buy": artifacts.get("pro_buy"),
+            "anti_buy": artifacts.get("anti_buy"),
+            "pro_sell": artifacts.get("pro_sell"),
+            "anti_sell": artifacts.get("anti_sell"),
+        },
         "disclaimer": DISCLAIMER,
     }
 
@@ -259,6 +379,7 @@ def synthesize_judgment(state: MainAgentState) -> dict:
         "phase": "done",
         "progress": 100,
         "artifacts_preview": {**state.get("artifacts_preview", {}), "final_summary": content[:400]},
+        "awaiting_human": None,
     }
 
 
