@@ -55,6 +55,21 @@ npm run dev
 - [PRD](docs/prd/financial-team-agent-prd.md)
 - [Schema 附录](docs/prd/references/schemas.md)
 - [Agent Card 样例](docs/prd/references/agent-cards.md)
+- [PR 需求索引](docs/pr/README.md)
+
+## GitNexus 代码图谱
+
+本仓库已接入 [GitNexus](https://github.com/ozankasikci/gitnexus)（MCP：`user-gitnexus`），索引名 **finance-agent**。
+
+```bash
+# 首次 / 大改后重建索引（索引文件在 .gitnexus/，不入库）
+npx gitnexus analyze
+
+# 查看索引状态
+npx gitnexus status
+```
+
+Agent 协作说明见根目录 `AGENTS.md`；Cursor 规则见 `.cursor/rules/gitnexus.mdc`。
 
 ## 里程碑
 
