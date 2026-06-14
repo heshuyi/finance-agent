@@ -16,9 +16,23 @@ class SubAgentStatus(TypedDict):
 
 
 Phase = Literal[
-    "planning", "data", "verify", "auth", "debate", "judgment", "done", "cancelled",
+    "planning", "data", "verify", "auth", "debate", "debate_r1", "debate_r2", "debate_r3",
+    "judgment", "done", "cancelled",
 ]
 Intent = Literal["buy_analysis", "sell_analysis", "verify_only", "data_query", "general"]
+
+FeedRole = Literal["system", "bull", "bear", "staff", "judge"]
+
+
+class TeamFeedMessage(TypedDict):
+    id: str
+    agent_id: str
+    display_name: str
+    role: FeedRole
+    phase: str
+    round: int
+    content: str
+    created_at: str
 
 
 class MainAgentState(TypedDict):
@@ -39,6 +53,8 @@ class MainAgentState(TypedDict):
     errors: list[dict]
     position: Optional[dict]
     user_cancelled: Optional[bool]
+    team_feed: list[TeamFeedMessage]
+    debate_transcript: dict
 
 
 SUB_AGENT_IDS = [
