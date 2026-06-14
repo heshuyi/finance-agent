@@ -14,6 +14,8 @@ dependencies = [
     "langchain-openai>=0.3.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.28.0",
+    "langgraph-checkpoint-sqlite>=3.0.0",
+    "aiosqlite>=0.20.0",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +27,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agents*", "api*", "tools*", "a2a*"]
+include = ["agents*", "api*", "tools*", "a2a*", "storage*"]
 
 [tool.ruff]
 line-length = 100
