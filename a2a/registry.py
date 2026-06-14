@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from agents.arbitrator.runner import run_arbitrator
 from agents.anti_buy.runner import run_anti_buy
 from agents.anti_sell.runner import run_anti_sell
 from agents.authenticity.runner import run_authenticity
@@ -22,6 +23,7 @@ REGISTRY: dict[str, AgentRunner] = {
     "anti_buy": run_anti_buy,
     "pro_sell": run_pro_sell,
     "anti_sell": run_anti_sell,
+    "arbitrator": run_arbitrator,
 }
 
 
