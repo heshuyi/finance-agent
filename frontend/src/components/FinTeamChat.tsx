@@ -1,28 +1,22 @@
 "use client";
 
 import { CopilotChat } from "@copilotkit/react-ui";
-import { useCoAgentStateRender } from "@copilotkit/react-core";
+import { useCoAgent } from "@copilotkit/react-core";
 import "@copilotkit/react-ui/styles.css";
 import { useThread } from "@/context/thread-context";
-import { AgentStatusPanel } from "./AgentStatusPanel";
 import { AuthenticityHitl } from "./AuthenticityHitl";
-import { DebatePanel } from "./DebatePanel";
-import { FinalReportPanel } from "./FinalReportPanel";
 import { FinTeamFrontendTools } from "./FinTeamFrontendTools";
+import { TeamGroupChat, type TeamFeedMessage } from "./TeamGroupChat";
+
+type FinTeamState = {
+  team_feed?: TeamFeedMessage[];
+  progress?: number;
+  phase?: string;
+};
 
 export function FinTeamChat() {
   const { threadId, ready } = useThread();
-
-  useCoAgentStateRender({
-    name: "finteam_main",
-    render: ({ state }) => (
-      <div className="flex w-full flex-col gap-4 lg:w-96 lg:shrink-0">
-        <AgentStatusPanel state={state} />
-        <DebatePanel state={state} />
-        <FinalReportPanel report={state.final_report} />
-      </div>
-    ),
-  });
+  const { state } = useCoAgent<FinTeamState>({ name: "finteam_main" });
 
   return (
     <>
@@ -47,6 +41,11 @@ export function FinTeamChat() {
             </div>
           )}
         </div>
+        <TeamGroupChat
+          feed={state?.team_feed}
+          progress={state?.progress}
+          phase={state?.phase}
+        />
       </div>
     </>
   );
